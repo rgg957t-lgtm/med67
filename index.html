@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>MedTime — ผู้ช่วยกินยาสำหรับผู้สูงอายุ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24..48,400..700,0..1,-50..200&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          primary: "#00685f",
+          "primary-container": "#008378",
+          "on-primary": "#ffffff",
+          "on-primary-container": "#f4fffc",
+          tertiary: "#006b2c",
+          "tertiary-container": "#00873a",
+          "on-tertiary": "#ffffff",
+          "on-tertiary-container": "#f7fff2",
+          secondary: "#904d00",
+          "secondary-container": "#fe932c",
+          "on-secondary": "#ffffff",
+          "on-secondary-container": "#663500",
+          error: "#ba1a1a",
+          "error-container": "#ffdad6",
+          "on-error": "#ffffff",
+          "on-error-container": "#93000a",
+          surface: "#faf8ff",
+          "surface-container": "#eaedff",
+          "surface-container-low": "#f2f3ff",
+          "surface-container-lowest": "#ffffff",
+          "surface-container-high": "#e2e7ff",
+          "on-surface": "#131b2e",
+          "on-surface-variant": "#3d4947",
+          "outline-variant": "#bcc9c6",
+        },
+        fontFamily: { sans: ["Atkinson Hyperlegible Next", "sans-serif"] },
+      },
+    },
+  };
+</script>
+<style>
+  html,body{margin:0;padding:0;background:#faf8ff;overscroll-behavior:none;}
+  ::-webkit-scrollbar{display:none;}
+  .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;display:inline-block;line-height:1;white-space:nowrap;-webkit-font-smoothing:antialiased;}
+  .icon-fill{font-variation-settings:'FILL' 1;}
+  @media print{
+    nav,header,.no-print{display:none !important;}
+    body{background:#fff !important;}
+  }
+</style>
+</head>
+<body class="font-sans text-[#131b2e]">
+<div id="app" class="min-h-screen"></div>
+
+<script>
+/* ===================== STATE ===================== */
+const STORAGE_KEY = "medtime.single.v1";
+
+function seedHistoricalLogs(meds, daysBack){
+  const logs = [];
+  let seed = 42;
+  const rand = () => { seed = (seed*9301+49297)%233280; return seed/233280; };
+  for(let i=1;i<=daysBack;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const dateStr = d.toISOString().slice(0,10);
+    meds.forEach(med=>{
+      med.slots.forEach(slot=>{
+        const status = rand() > 0.12 ? "taken" : "missed";
+        logs.push({ id:`${med.id}-${dateStr}-${slot}`, medicationId:med.id, date:dateStr, slot, status, scheduledTime: med.times[slot] });
+      });
+    });
+  }
+  return logs;
+}
+
+function todaysSeedLogs(meds){
+  const today = new Date().toISOString().slice(0,10);
+  const logs = [];
+  meds.forEach(med=>{
+    med.slots.forEach(slot=>{
+      logs.push({ id:`${med.id}-${today}-${slot}`, medicationId:med.id, date:today, slot, status:"pending", scheduledTime: med.times[slot] });
+    });
+  });
+  return logs;
+}
+
+function defaultState(){
+  const medications = [
+    { id:"med-amlodipine", name:"แอมโลดิพีน (Amlodipine)", dosage:"1 เม็ด หลังอาหารเช้าทันที", color:"#F59E0B", slots:["morning"], times:{morning:"08:00"}, notes:"ยาลดความดันโลหิต ห้ามหยุดยาเอง" },
+    { id:"med-metformin", name:"เมทฟอร์มิน (Metformin)", dosage:"1 เม็ด หลังอาหารกลางวัน", color:"#FFFFFF", slots:["afternoon"], times:{afternoon:"12:30"}, notes:"ยาควบคุมเบาหวาน" },
+    { id:"med-atorvastatin", name:"อะทอร์วาสแตติน (Atorvastatin)", dosage:"1 เม็ด หลังอาหารเย็น", color:"#EF4444", slots:["evening"], times:{evening:"18:30"}, notes:"ยาลดไขมันในเลือด" },
+    { id:"med-melatonin", name:"เมลาโทนิน (Melatonin)", dosage:"1 เม็ด ก่อนนอน", color:"#6366F1", slots:["bedtime"], times:{bedtime:"21:00"}, notes:"ช่วยให้นอนหลับ" },
+  ];
+  return {
+    patient: { name:"คุณยายสมศรี ใจดี", age:78, address:"บ้านเลขที่ 124/8 หมู่บ้านสุขใจ ซอย 5 ถนนสุขุมวิท เขตคลองเตย กรุงเทพมหานคร 10110", addressNote:"จุดสังเกต: หน้าบ้านมีกระถางต้นโมกสีขาว" },
+    medications,
+    doseLogs: [...todaysSeedLogs(medications), ...seedHistoricalLogs(medications, 30)],
+    contacts: [
+      { id:"c-nurse", name:"พยาบาลวันดี สุขใจ", role:"พยาบาลวิชาชีพดูแลประจำบ้าน", relation:"ผู้ดูแลหลัก", phone:"089-123-4567", isPrimary:true, online:true },
+      { id:"c-daughter", name:"คุณสมใจ ใจดี", role:"ลูกสาว", relation:"ลูกสาว", phone:"081-987-6543", isPrimary:false, online:true },
+      { id:"c-son", name:"คุณเอกพล ใจดี", role:"ลูกชาย", relation:"ลูกชาย", phone:"086-555-4321", isPrimary:false, online:false },
+    ],
+    advice: [
+      { id:"adv-1", date:new Date().toISOString(), from:"พยาบาลวันดี สุขใจ", message:"คุณยายอย่าลืมดื่มน้ำตามเยอะ ๆ หลังทานยาลดความดันเช้านี้ค่ะ ความดันช่วงเช้า 125/80 อยู่ในเกณฑ์ดีมาก", acknowledged:false },
+    ],
+    alerts: [],
+    staff: { name:"วันดี สุขใจ", role:"พยาบาลวิชาชีพ", clinic:"คลินิกสุขสันต์อบอุ่น", phone:"02-123-4567", pin:"1234" },
+    onboarded: false,
+    patientPin: "1234",
+    fontScale: "normal",
+    speechRate: 0.9,
+    caregiverAuthed: false,
+  };
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0,10);
+    const hasToday = parsed.doseLogs && parsed.doseLogs.some(l=>l.date===today);
+    if(!hasToday){ parsed.doseLogs = [...(parsed.doseLogs||[]), ...todaysSeedLogs(parsed.medications)]; }
+    return Object.assign(defaultState(), parsed);
+  }catch(e){ return defaultState(); }
+}
+
+let STATE = loadState();
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }
+
+/* ===================== HELPERS ===================== */
+const SLOT_LABELS = {
+  morning:{th:"เช้า", icon:"wb_sunny"},
+  afternoon:{th:"กลางวัน", icon:"light_mode"},
+  evening:{th:"เย็น", icon:"wb_twilight"},
+  bedtime:{th:"ก่อนนอน", icon:"bedtime"},
+};
+const SLOT_ORDER = ["morning","afternoon","evening","bedtime"];
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function todaysLogs(){ return STATE.doseLogs.filter(l=>l.date===todayStr()); }
+function findMed(id){ return STATE.medications.find(m=>m.id===id); }
+function esc(str){ return String(str==null?"":str).replace(/[&<>"']/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[s])); }
+function icon(name, size, filled, extra){ return `<span class="material-symbols-outlined ${filled?'icon-fill':''} ${extra||''}" style="font-size:${size||24}px">${name}</span>`; }
+
+function speak(text, rate){
+  if(!('speechSynthesis' in window)){ alert(text); return; }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "th-TH";
+  u.rate = rate || STATE.speechRate || 0.9;
+  window.speechSynthesis.speak(u);
+}
+
+function navigate(hash){ location.hash = hash; }
+
+function addAlert(type, message){
+  STATE.alerts.unshift({ id:"alert-"+Date.now(), type, message, createdAt:new Date().toISOString(), resolved:false });
+  save();
+}
+
+function timeAgo(iso){
+  const min = Math.floor((Date.now()-new Date(iso).getTime())/60000);
+  if(min<1) return "เมื่อสักครู่";
+  if(min<60) return min+" นาทีที่แล้ว";
+  return Math.floor(min/60)+" ชั่วโมงที่แล้ว";
+}
+
+/* Auto-flag missed doses (pending doses more than 45 min past schedule) */
+function checkMissedDoses(){
+  const now = new Date();
+  const today = todayStr();
+  let changed = false;
+  STATE.doseLogs.forEach(log=>{
+    if(log.date!==today || log.status!=="pending") return;
+    const [h,m] = log.scheduledTime.split(":").map(Number);
+    const sched = new Date(); sched.setHours(h,m,0,0);
+    if((now-sched)/60000 > 45){ log.status = "missed"; changed = true; }
+  });
+  if(changed){ save(); }
+  return changed;
+}
+setInterval(()=>{ if(checkMissedDoses()) render(); }, 30000);
+
+/* ===================== SHARED UI PARTIALS ===================== */
+function patientHeader(title, subtitle, showBack){
+  const unresolved = STATE.alerts.filter(a=>!a.resolved).length;
+  return `
+  <header class="fixed top-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-xl shadow-sm">
+    <div class="h-20 px-5 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-3 min-w-0">
+        ${showBack ? `<button onclick="history.back()" class="w-12 h-12 -ml-2 rounded-full flex items-center justify-center hover:bg-surface-container">${icon('arrow_back',26)}</button>`
+        : `<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">${icon('health_and_safety',24,true,'text-white')}</div>`}
+        <div class="flex flex-col min-w-0">
+          <span class="text-xl font-semibold text-primary leading-tight truncate">${esc(title)}</span>
+          ${subtitle?`<span class="text-sm text-on-surface-variant truncate">${esc(subtitle)}</span>`:""}
+        </div>
+      </div>
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button onclick="navigate('#/sos')" class="w-14 h-14 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container relative">
+          ${icon('notifications',28)}
+          ${unresolved>0?`<span class="absolute top-3 right-3 w-3 h-3 bg-secondary-container rounded-full ring-2 ring-surface"></span>`:""}
+        </button>
+        <button onclick="navigate('#/settings')" class="w-14 h-14 rounded-full flex items-center justify-center">
+          <div class="w-9 h-9 rounded-full bg-primary-container/20 text-primary flex items-center justify-center font-semibold">${esc(STATE.patient.name.slice(-4,-2))}</div>
+        </button>
+      </div>
+    </div>
+  </header>`;
+}
+
+function patientBottomNav(active){
+  const items = [
+    {h:"#/home", label:"หน้าหลัก", icon:"medication"},
+    {h:"#/add", label:"เพิ่มยา", icon:"add_circle"},
+    {h:"#/history", label:"ประวัติ", icon:"calendar_month"},
+    {h:"#/contacts", label:"ติดต่อผู้ดูแล", icon:"contact_emergency"},
+  ];
+  return `
+  <nav class="fixed bottom-0 inset-x-0 z-50 bg-surface/95 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+    <div class="flex justify-around items-center h-24 px-1">
+      ${items.map(it=>`
+        <button onclick="navigate('${it.h}')" class="flex flex-col items-center justify-center gap-1 min-w-[72px] min-h-[56px] ${active===it.h?'text-primary font-bold':'text-on-surface-variant'}">
+          ${icon(it.icon,32)}
+          <span class="text-xs">${it.label}</span>
+        </button>`).join("")}
+    </div>
+  </nav>`;
+}
+
+function shell(active, title, subtitle, showBack, innerHtml){
+  return `${patientHeader(title,subtitle,showBack)}
+  <main class="pt-24 pb-32 px-5 flex flex-col gap-4 max-w-lg mx-auto">${innerHtml}</main>
+  ${patientBottomNav(active)}`;
+}
+
+function card(innerHtml, accent, extraClass){
+  return `<section class="bg-surface-container-lowest rounded-xl p-5 shadow relative overflow-hidden ${extraClass||''}">
+    ${accent?`<div class="absolute top-0 left-0 bottom-0 w-2" style="background:${accent}"></div>`:""}
+    ${innerHtml}
+  </section>`;
+}
+
+function statusBadge(status){
+  const map = {
+    taken:{bg:"bg-tertiary-container/10",text:"text-tertiary",border:"border-tertiary","icon":"check_circle",label:"เรียบร้อย (Taken)"},
+    missed:{bg:"bg-error-container",text:"text-on-error-container",border:"border-error","icon":"error",label:"พลาดโดสยา (Missed)"},
+    pending:{bg:"bg-secondary-container/10",text:"text-secondary",border:"border-secondary","icon":"schedule",label:"รอถึงเวลา (Pending)"},
+    snoozed:{bg:"bg-surface-container",text:"text-on-surface-variant",border:"border-outline-variant","icon":"snooze",label:"เลื่อนแล้ว (Snoozed)"},
+  };
+  const s = map[status];
+  return `<span class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border ${s.bg} ${s.text} ${s.border}">${icon(s.icon,18,true)}${s.label}</span>`;
+}
+
+function primaryBtn({label, onclick, href, icon:ic, variant, extra, type, disabled}){
+  variant = variant || "primary";
+  const variants = {
+    primary:"bg-primary text-white",
+    secondary:"bg-surface-container text-on-surface shadow-none",
+    outline:"bg-surface-container-lowest border-2 border-secondary text-secondary shadow-sm",
+    error:"bg-error text-white",
+    ghost:"bg-transparent shadow-none text-on-surface-variant",
+  };
+  const base = `w-full min-h-[56px] rounded-xl flex items-center justify-center gap-2 font-bold shadow ${variants[variant]} ${extra||''} ${disabled?'opacity-50 pointer-events-none':''}`;
+  const content = `${ic?icon(ic,26):""}<span>${esc(label)}</span>`;
+  if(href) return `<a href="${href}" class="${base}">${content}</a>`;
+  return `<button type="${type||'button'}" ${disabled?'disabled':''} onclick="${onclick||''}" class="${base}">${content}</button>`;
+}
+
+function voiceBtn(text, extra){
+  return `<button onclick='speak(${JSON.stringify(text)})' class="flex items-center gap-1.5 px-3 py-2 bg-primary-container/15 text-primary rounded-full font-semibold text-sm flex-shrink-0 ${extra||''}">${icon('volume_up',22)}อ่านออกเสียง</button>`;
+}
+
+/* ===================== ACTIONS ===================== */
+function markDose(id, status){
+  const log = STATE.doseLogs.find(l=>l.id===id);
+  if(!log) return;
+  log.status = status;
+  if(status==="taken") log.takenAt = new Date().toISOString();
+  save(); render();
+}
+function acknowledgeAdvice(id){
+  const a = STATE.advice.find(x=>x.id===id);
+  if(a){ a.acknowledged = true; save(); render(); }
+}
+function resolveAlert(id){
+  const a = STATE.alerts.find(x=>x.id===id);
+  if(a){ a.resolved = true; save(); render(); }
+}
+
+let addMedDraft = { name:"", dosage:"1 เม็ด หลังอาหาร", color:"#F59E0B", slots:["morning"], times:{morning:"08:00",afternoon:"12:30",evening:"18:30",bedtime:"21:00"}, notes:"" };
+function resetAddMedDraft(){ addMedDraft = { name:"", dosage:"1 เม็ด หลังอาหาร", color:"#F59E0B", slots:["morning"], times:{morning:"08:00",afternoon:"12:30",evening:"18:30",bedtime:"21:00"}, notes:"" }; }
+function toggleDraftSlot(slot){
+  const i = addMedDraft.slots.indexOf(slot);
+  if(i>=0) addMedDraft.slots.splice(i,1); else addMedDraft.slots.push(slot);
+  render();
+}
+function setDraftColor(c){ addMedDraft.color = c; render(); }
+function submitAddMedicine(e){
+  e.preventDefault();
+  const nameEl = document.getElementById('med-name');
+  const dosageEl = document.getElementById('med-dosage');
+  const notesEl = document.getElementById('med-notes');
+  addMedDraft.name = nameEl.value.trim();
+  addMedDraft.dosage = dosageEl.value.trim() || "1 เม็ด";
+  addMedDraft.notes = notesEl.value.trim();
+  if(!addMedDraft.name){ alert("กรุณากรอกชื่อยาก่อนนะคะ"); return; }
+  if(addMedDraft.slots.length===0){ alert("กรุณาเลือกช่วงเวลาอย่างน้อย 1 ช่วง"); return; }
+  const id = "med-"+Date.now();
+  const times = {}; addMedDraft.slots.forEach(s=>times[s]=addMedDraft.times[s]);
+  STATE.medications.push({ id, name:addMedDraft.name, dosage:addMedDraft.dosage, color:addMedDraft.color, slots:[...addMedDraft.slots], times, notes:addMedDraft.notes });
+  const today = todayStr();
+  addMedDraft.slots.forEach(slot=>{
+    STATE.doseLogs.push({ id:`${id}-${today}-${slot}`, medicationId:id, date:today, slot, status:"pending", scheduledTime: times[slot] });
+  });
+  save(); resetAddMedDraft();
+  navigate('#/home');
+}
+
+function checkPin(pin){ return pin === STATE.patientPin; }
+let pinBuffer = "";
+function tapPinKey(k){
+  if(k==="back"){ pinBuffer = pinBuffer.slice(0,-1); render(); return; }
+  if(pinBuffer.length>=4) return;
+  pinBuffer += k;
+  render();
+  if(pinBuffer.length===4){
+    setTimeout(()=>{
+      if(checkPin(pinBuffer)){ STATE.onboarded = true; save(); pinBuffer=""; navigate('#/home'); }
+      else { document.getElementById('pin-error').textContent = "รหัส PIN ไม่ถูกต้อง ลองอีกครั้งนะคะ (คำใบ้: 1234)"; pinBuffer=""; render(); }
+    }, 200);
+  }
+}
+function quickLogin(){ STATE.onboarded = true; save(); navigate('#/home'); }
+function logout(){ STATE.onboarded = false; save(); navigate('#/onboarding'); }
+
+function requestPinHelp(){
+  addAlert("pin_reset_request", `${STATE.patient.name} ขอความช่วยเหลือให้ลูกหลานช่วยตั้งรหัส PIN ใหม่`);
+  render();
+}
+
+function sendLocation(){
+  addAlert("location", `${STATE.patient.name} ส่งพิกัดบ้านฉุกเฉินให้ลูกหลานแล้ว`);
+  render();
+  setTimeout(render, 4000);
+}
+
+/* SOS countdown */
+let sosState = { phase:"counting", seconds:5, timer:null };
+function resetSos(){ if(sosState.timer) clearTimeout(sosState.timer); sosState = { phase:"counting", seconds:5, timer:null }; }
+function sosTick(){
+  if(sosState.phase!=="counting") return;
+  if(sosState.seconds<=0){
+    sosState.phase="dispatched";
+    addAlert("sos", `${STATE.patient.name} กดปุ่ม SOS ขอความช่วยเหลือฉุกเฉิน`);
+    render();
+    return;
+  }
+  render();
+  sosState.timer = setTimeout(()=>{ sosState.seconds -= 1; sosTick(); }, 1000);
+}
+function cancelSos(){ if(sosState.timer) clearTimeout(sosState.timer); sosState.phase="cancelled"; render(); }
+
+/* Settings */
+function setFontScale(scale){
+  STATE.fontScale = scale; save();
+  const map = {normal:"100%", large:"115%", xlarge:"130%"};
+  document.documentElement.style.fontSize = map[scale];
+  render();
+}
+function setSpeechRate(v){ STATE.speechRate = parseFloat(v); save(); }
+function saveProfile(e){
+  e.preventDefault();
+  STATE.patient.name = document.getElementById('p-name').value.trim() || STATE.patient.name;
+  STATE.patient.age = parseInt(document.getElementById('p-age').value,10) || STATE.patient.age;
+  STATE.patient.address = document.getElementById('p-address').value.trim();
+  STATE.patient.addressNote = document.getElementById('p-note').value.trim();
+  save();
+  navigate('#/settings');
+}
+
+/* Caregiver */
+function checkStaffPin(pin){ return pin === STATE.staff.pin; }
+function caregiverLoginSubmit(e){
+  e.preventDefault();
+  const pin = document.getElementById('cg-pin').value;
+  if(checkStaffPin(pin)){ STATE.caregiverAuthed = true; save(); navigate('#/caregiver'); }
+  else { document.getElementById('cg-error').textContent = "รหัสผ่านไม่ถูกต้อง (คำใบ้: 1234)"; }
+}
+function caregiverLogout(){ STATE.caregiverAuthed=false; save(); navigate('#/onboarding'); }
+function sendBroadcast(){
+  const el = document.getElementById('broadcast-text');
+  const text = el.value.trim();
+  if(!text) return;
+  STATE.advice.unshift({ id:"advice-"+Date.now(), date:new Date().toISOString(), from:STATE.staff.name, message:text, acknowledged:false });
+  save(); el.value=""; render();
+}
+let pinResetDraft = "";
+function setPinResetDraft(v){ pinResetDraft = v.replace(/\D/g,'').slice(0,4); }
+function resetPatientPin(alertId){
+  if(pinResetDraft.length!==4){ alert("กรุณากรอกรหัส PIN 4 หลัก"); return; }
+  STATE.patientPin = pinResetDraft;
+  if(alertId) resolveAlert(alertId);
+  alert(`ตั้งรหัส PIN ใหม่ให้ ${STATE.patient.name} เรียบร้อยแล้ว (${pinResetDraft})`);
+  pinResetDraft=""; save(); render();
+}
+
+/* ===================== VIEWS ===================== */
+function viewOnboarding(){
+  const pinDots = [1,2,3,4].map(i=>`<div class="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-bold shadow-sm ${i<=pinBuffer.length?'bg-primary text-white':'bg-surface-container-high text-on-surface'}">${i<=pinBuffer.length?'•':''}</div>`).join("");
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","back"];
+  const keypad = keys.map(k=>{
+    if(k==="") return `<div></div>`;
+    const label = k==="back" ? icon('backspace',24) : k;
+    return `<button onclick="tapPinKey('${k}')" class="min-h-[56px] rounded-xl bg-surface-container-low hover:bg-surface-container-high text-2xl font-semibold flex items-center justify-center">${label}</button>`;
+  }).join("");
+  return `
+  <div class="min-h-screen flex flex-col">
+    <header class="w-full">
+      <div class="h-20 px-5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow">${icon('health_and_safety',24,true,'text-white')}</div>
+          <div class="flex flex-col">
+            <span class="text-lg font-semibold leading-tight">MedTime</span>
+            <span class="text-xs text-on-surface-variant leading-none">Senior Sign In</span>
+          </div>
+        </div>
+        <button onclick='speak("ยินดีต้อนรับสู่ MedTime คุณตาสามารถกดที่รูปคุณยายสมศรี หรือพิมพ์รหัสสี่หลักเพื่อเข้าดูยาประจำวันได้เลยค่ะ")' class="min-h-[48px] px-4 rounded-full flex items-center gap-1.5 bg-surface-container-low text-primary">${icon('volume_up',22)}<span class="text-sm font-semibold">ฟัง</span></button>
+      </div>
+    </header>
+    <main class="flex-1 px-5 pb-10 flex flex-col gap-4 max-w-lg mx-auto w-full">
+      <div class="mt-2">
+        <h1 class="text-3xl font-bold">ยินดีต้อนรับสู่ MedTime</h1>
+        <p class="text-on-surface-variant">ระบบแจ้งเตือนการทานยาเพื่อสุขภาพที่แข็งแรงของคุณตาคุณยาย</p>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <span class="text-sm text-on-surface-variant">เข้าใช้งานด่วนด้วยโปรไฟล์เดิม</span>
+        <div class="p-5 rounded-xl bg-surface-container-lowest shadow flex flex-col gap-3">
+          <div class="flex items-center gap-4">
+            <div class="relative w-20 h-20 rounded-full bg-primary-container/20 flex items-center justify-center flex-shrink-0">
+              ${icon('person',40,false,'text-primary')}
+              <span class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center text-white shadow-sm">${icon('verified',16)}</span>
+            </div>
+            <div class="flex flex-col min-w-0">
+              <span class="text-xl font-semibold truncate">${esc(STATE.patient.name)}</span>
+              <span class="text-sm text-on-surface-variant">ผู้ป่วยอายุ ${STATE.patient.age} ปี (ยาความดันและหัวใจ)</span>
+            </div>
+          </div>
+          <button onclick="quickLogin()" class="w-full min-h-[60px] rounded-xl bg-primary text-white font-bold flex items-center justify-center gap-3 shadow">
+            ${icon('waving_hand',28)}<span>เข้าใช้งานในชื่อ "${esc(STATE.patient.name.replace('ใจดี','').trim())}"</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 my-1">
+        <div class="flex-1 h-0.5 bg-surface-container-high"></div>
+        <span class="text-sm text-on-surface-variant">หรือกรอกรหัส PIN 4 หลัก</span>
+        <div class="flex-1 h-0.5 bg-surface-container-high"></div>
+      </div>
+
+      <div class="p-5 rounded-xl bg-surface-container-lowest shadow flex flex-col gap-4 items-center">
+        <div class="flex gap-3">${pinDots}</div>
+        <p id="pin-error" class="text-sm text-error text-center"></p>
+        <div class="grid grid-cols-3 gap-2 w-full max-w-xs">${keypad}</div>
+        <p class="text-xs text-on-surface-variant">รหัสเริ่มต้นสำหรับทดลองใช้: 1234</p>
+      </div>
+
+      <div class="p-5 rounded-xl bg-secondary-container/20 flex items-start gap-3">
+        <div class="w-12 h-12 rounded-full bg-secondary-container text-white flex items-center justify-center shrink-0">${icon('support_agent',26)}</div>
+        <div class="flex flex-col flex-1">
+          <span class="font-bold text-on-secondary-container">ลืมรหัสผ่านหรือติดปัญหาการเข้าใช้?</span>
+          <p class="text-sm text-on-surface-variant mb-2">ไม่ต้องกังวลใจค่ะ กดปุ่มเพื่อขอความช่วยเหลือจากลูกหลานได้ทันที</p>
+          <button onclick="requestPinHelp()" class="min-h-[56px] px-4 rounded-xl bg-secondary-container text-white font-bold flex items-center justify-center gap-2 shadow-sm">${icon('lock_reset',24)}<span>ขอความช่วยเหลือเรื่องรหัสผ่าน</span></button>
+        </div>
+      </div>
+
+      <div class="pt-4 flex flex-col items-center text-center gap-1">
+        <span class="text-sm text-on-surface-variant">สำหรับแพทย์ พยาบาล หรือผู้ดูแลทางไกล</span>
+        <button onclick="navigate('#/caregiver/login')" class="min-h-[48px] px-4 font-semibold text-primary underline flex items-center gap-1">${icon('medical_services',20)}<span>เข้าสู่ระบบ Caregiver Portal</span></button>
+      </div>
+    </main>
+  </div>`;
+}
+
+function greeting(){
+  const h = new Date().getHours();
+  if(h<11) return {t:"สวัสดีตอนเช้า", e:"👵"};
+  if(h<17) return {t:"สวัสดีตอนบ่าย", e:"🌤️"};
+  if(h<20) return {t:"สวัสดีตอนเย็น", e:"🌇"};
+  return {t:"ราตรีสวัสดิ์", e:"🌙"};
+}
+
+function viewHome(){
+  const logs = todaysLogs();
+  const taken = logs.filter(l=>l.status==="taken").length;
+  const total = logs.length;
+  const nextDue = logs.filter(l=>l.status==="pending").sort((a,b)=>a.scheduledTime.localeCompare(b.scheduledTime))[0];
+  const g = greeting();
+  const todayAdvice = STATE.advice.find(a=>!a.acknowledged);
+
+  const grouped = SLOT_ORDER.map(slot=>({ slot, items: logs.filter(l=>l.slot===slot).map(log=>({log, med:findMed(log.medicationId)})).filter(x=>x.med) }));
+
+  const scheduleHtml = grouped.map(({slot, items})=>{
+    if(items.length===0) return "";
+    const rows = items.map(({log,med})=>{
+      let actions = "";
+      if(log.status==="pending"){
+        actions = `<div class="flex gap-2 mt-3 pl-2">
+          ${primaryBtn({label:"กินยาแล้ว", icon:"check_circle", onclick:`markDose('${log.id}','taken')`, extra:"!min-h-[56px]"})}
+          <button onclick="markDose('${log.id}','snoozed')" class="min-h-[56px] px-4 rounded-xl border-2 border-secondary text-secondary font-bold flex items-center gap-2">${icon('snooze',24)}เลื่อน 15 นาที</button>
+        </div>`;
+      } else if(log.status==="snoozed"){
+        actions = `<div class="flex gap-2 mt-3 pl-2">${primaryBtn({label:"กินยาแล้ว", icon:"check_circle", onclick:`markDose('${log.id}','taken')`})}</div>`;
+      } else if(log.status==="missed"){
+        actions = `<div class="flex gap-2 mt-3 pl-2">
+          ${primaryBtn({label:"กินยาแล้ว (สาย)", icon:"check_circle", variant:"secondary", onclick:`markDose('${log.id}','taken')`})}
+          <button onclick="navigate('#/missed')" class="min-h-[56px] px-4 rounded-xl text-on-surface-variant font-semibold">รายละเอียด</button>
+        </div>`;
+      }
+      return card(`
+        <div class="flex items-start gap-3 pl-2">
+          <div class="w-16 h-16 rounded-full flex-shrink-0 border-2 border-outline-variant flex items-center justify-center" style="background:${med.color}">
+            ${icon('medication',30,false, med.color==="#FFFFFF"?"text-on-surface":"text-white")}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-lg font-semibold truncate">${esc(med.name)}</p>
+            <p class="text-sm text-on-surface-variant">${esc(med.dosage)}</p>
+            <p class="text-sm text-secondary mt-1">เวลา ${log.scheduledTime} น.</p>
+            <div class="mt-2">${statusBadge(log.status)}</div>
+          </div>
+        </div>
+        ${actions}
+      `, med.color, "!shadow-sm");
+    }).join("");
+    return `<div class="flex flex-col gap-2">
+      <div class="flex items-center gap-1.5 px-1 text-on-surface-variant">${icon(SLOT_LABELS[slot].icon,20)}<span class="font-semibold text-sm">${SLOT_LABELS[slot].th}</span></div>
+      ${rows}
+    </div>`;
+  }).join("");
+
+  return shell("#/home", "MedTime", "Dashboard", false, `
+    <section class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2 bg-surface-container-low p-3 rounded-xl">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-3.5 h-3.5 rounded-full bg-tertiary animate-pulse flex-shrink-0"></span>
+          <span class="text-sm font-semibold truncate">ผู้ดูแลหลักออนไลน์พร้อมช่วยเหลือ</span>
+        </div>
+        ${voiceBtn("ตารางยาวันนี้ของคุณยาย")}
+      </div>
+      <div class="px-1">
+        <h1 class="text-2xl font-bold">${g.t} ${g.e}</h1>
+        <p class="text-on-surface-variant">${esc(STATE.patient.name)} • ${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long'})}</p>
+      </div>
+    </section>
+
+    ${card(`
+      <div class="flex items-center justify-between pl-2">
+        <div>
+          <p class="text-sm text-on-surface-variant">ความคืบหน้าวันนี้</p>
+          <p class="text-2xl font-bold">${taken} / ${total} รายการ</p>
+        </div>
+        <button onclick='speak("อ่านตารางยาวันนี้")' class="w-14 h-14 rounded-full bg-primary-container/15 text-primary flex items-center justify-center flex-shrink-0">${icon('record_voice_over',28)}</button>
+      </div>
+      <div class="w-full h-3 bg-surface-container rounded-full mt-3 overflow-hidden ml-2" style="width:calc(100% - 8px)">
+        <div class="h-full bg-tertiary rounded-full" style="width:${total?Math.round(taken/total*100):0}%"></div>
+      </div>
+    `, "#00685f")}
+
+    ${nextDue ? card(`
+      <div class="pl-2 flex items-center gap-3">
+        ${icon('alarm',32,false,'text-secondary')}
+        <div>
+          <p class="text-sm text-secondary font-semibold">โดสถัดไป</p>
+          <p class="text-lg font-semibold">${esc(findMed(nextDue.medicationId).name)} • เวลา ${nextDue.scheduledTime} น.</p>
+        </div>
+      </div>
+    `, "#D97706", "border-2 border-secondary-container/40") : ""}
+
+    ${todayAdvice ? card(`
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-1 text-primary font-semibold text-sm">${icon('forum',20)}คำแนะนำล่าสุดจากผู้ดูแล</div>
+        <span class="text-xs text-on-surface-variant">${new Date(todayAdvice.date).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <p class="italic">"${esc(todayAdvice.message)}"</p>
+      <button onclick="acknowledgeAdvice('${todayAdvice.id}')" class="mt-3 w-full min-h-[48px] bg-tertiary text-white rounded-lg font-semibold flex items-center justify-center gap-1">${icon('thumb_up',20)}รับทราบคำแนะนำแล้ว</button>
+    `, null, "bg-primary-container/5") : ""}
+
+    <section class="flex flex-col gap-4">
+      <h2 class="text-xl font-bold px-1">ตารางยาวันนี้</h2>
+      ${scheduleHtml || `<p class="text-center text-on-surface-variant">ยังไม่มีรายการยา กด "เพิ่มยา" ด้านล่างเพื่อเริ่มต้นค่ะ</p>`}
+    </section>
+
+    <a href="#/sos" class="w-full min-h-[64px] bg-error text-white rounded-xl flex items-center justify-center gap-2 font-bold shadow mb-4">${icon('emergency',28)}ขอความช่วยเหลือฉุกเฉิน (SOS)</a>
+  `);
+}
+
+function viewAddMedicine(){
+  const COLORS = ["#F59E0B","#EF4444","#6366F1","#FFFFFF","#16A34A","#EC4899"];
+  const colorSwatches = COLORS.map(c=>`<button type="button" onclick="setDraftColor('${c}')" class="w-12 h-12 rounded-full border-2 ${addMedDraft.color===c?'border-primary ring-2 ring-primary ring-offset-2':'border-outline-variant'}" style="background:${c}"></button>`).join("");
+  const slotRows = SLOT_ORDER.map(slot=>{
+    const checked = addMedDraft.slots.includes(slot);
+    return `<div class="flex items-center justify-between gap-3 p-3 rounded-lg border-2 ${checked?'border-primary bg-primary-container/5':'border-outline-variant'}">
+      <button type="button" onclick="toggleDraftSlot('${slot}')" class="flex items-center gap-3 flex-1 text-left">
+        <span class="w-8 h-8 rounded-lg flex items-center justify-center border-2 ${checked?'bg-primary border-primary text-white':'border-outline-variant'}">${checked?icon('check',20):''}</span>
+        ${icon(SLOT_LABELS[slot].icon,22,false,'text-on-surface-variant')}
+        <span>${SLOT_LABELS[slot].th}</span>
+      </button>
+      ${checked?`<input type="time" value="${addMedDraft.times[slot]}" onchange="addMedDraft.times['${slot}']=this.value" class="min-h-[44px] px-2 rounded-lg bg-surface-container-low text-sm">`:''}
+    </div>`;
+  }).join("");
+
+  return shell("#/add", "เพิ่มยา", "MedTime", true, `
+    <div class="flex items-center justify-between px-1">
+      <h1 class="text-2xl font-bold">เพิ่มรายการยาใหม่</h1>
+      ${voiceBtn("กรอกชื่อยา ขนาดรับประทาน สีและรูปร่างของเม็ดยา แล้วเลือกช่วงเวลาที่ต้องกินยา จากนั้นกดบันทึก")}
+    </div>
+    <form onsubmit="submitAddMedicine(event)" class="flex flex-col gap-4">
+      ${card(`
+        <div class="flex flex-col gap-4 pl-2">
+          <div class="flex flex-col gap-1.5">
+            <label class="font-semibold" for="med-name">ชื่อยา หรือ ชื่อการค้า *</label>
+            <input id="med-name" value="${esc(addMedDraft.name)}" placeholder="เช่น แอมโลดิพีน (Amlodipine)" class="w-full min-h-[60px] px-4 rounded-xl bg-surface-container-low text-lg focus:outline-none focus:ring-2 focus:ring-primary">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="font-semibold" for="med-dosage">วิธีรับประทาน</label>
+            <input id="med-dosage" value="${esc(addMedDraft.dosage)}" placeholder="เช่น 1 เม็ด หลังอาหารเช้า" class="w-full min-h-[60px] px-4 rounded-xl bg-surface-container-low text-lg focus:outline-none focus:ring-2 focus:ring-primary">
+          </div>
+        </div>
+      `)}
+      ${card(`
+        <div class="flex flex-col gap-4 pl-2">
+          <div>
+            <p class="font-semibold mb-2">สีเม็ดยา</p>
+            <div class="flex gap-2 flex-wrap">${colorSwatches}</div>
+          </div>
+        </div>
+      `)}
+      ${card(`
+        <div class="flex flex-col gap-3 pl-2">
+          <p class="font-semibold">ช่วงเวลาที่ต้องรับประทาน *</p>
+          ${slotRows}
+        </div>
+      `)}
+      ${card(`
+        <div class="flex flex-col gap-1.5 pl-2">
+          <label class="font-semibold" for="med-notes">บันทึกเพิ่มเติม (ไม่บังคับ)</label>
+          <textarea id="med-notes" rows="3" placeholder="เช่น ห้ามหยุดยาเอง หรือข้อควรระวังอื่น ๆ" class="w-full px-4 py-3 rounded-xl bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-primary resize-none">${esc(addMedDraft.notes)}</textarea>
+        </div>
+      `)}
+      ${primaryBtn({label:"บันทึกรายการยา", icon:"save", type:"submit", extra:"!min-h-[64px] mb-4"})}
+    </form>
+  `);
+}
+
+function viewHistory(){
+  const map = new Map();
+  STATE.doseLogs.forEach(l=>{ const arr = map.get(l.date)||[]; arr.push(l); map.set(l.date,arr); });
+  const entries = Array.from(map.entries()).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,14);
+  const today = todayStr();
+  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  function dateLabel(d){ if(d===today) return "วันนี้"; if(d===yesterday) return "เมื่อวาน"; return new Date(d).toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'short',year:'numeric'}); }
+
+  const body = entries.map(([date, logs])=>{
+    const taken = logs.filter(l=>l.status==="taken").length;
+    const rows = logs.sort((a,b)=>a.scheduledTime.localeCompare(b.scheduledTime)).map(log=>{
+      const med = findMed(log.medicationId);
+      return `<div class="flex items-center gap-3 px-5 py-3">
+        <div class="w-10 h-10 rounded-full flex-shrink-0 border border-outline-variant" style="background:${med?med.color:'#ccc'}"></div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold truncate">${med?esc(med.name):'ยาที่ถูกลบแล้ว'}</p>
+          <p class="text-xs text-on-surface-variant">เวลา ${log.scheduledTime} น.${log.takenAt?` • กินเมื่อ ${new Date(log.takenAt).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}`:''}</p>
+        </div>
+        ${statusBadge(log.status)}
+      </div>`;
+    }).join(`<div class="border-t border-outline-variant/40"></div>`);
+    return `<div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between px-1">
+        <h2 class="text-lg font-bold">${dateLabel(date)} • ${new Date(date).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}</h2>
+        <span class="text-xs text-on-surface-variant">${taken}/${logs.length} เรียบร้อย</span>
+      </div>
+      ${card(`<div class="flex flex-col -mx-5">${rows}</div>`)}
+    </div>`;
+  }).join("");
+
+  return shell("#/history", "ประวัติ", "MedTime", true, `
+    <div class="flex items-center justify-between px-1">
+      <h1 class="text-2xl font-bold">ประวัติการกินยา</h1>
+      ${voiceBtn("นี่คือประวัติการกินยาย้อนหลัง แสดงรายการที่กินแล้วและรายการที่พลาดในแต่ละวัน")}
+    </div>
+    ${body || `<p class="text-center text-on-surface-variant">ยังไม่มีประวัติการกินยา</p>`}
+    <div class="flex items-center gap-3 bg-surface-container-low p-4 rounded-xl mb-4">
+      ${icon('info',24,false,'text-primary flex-shrink-0')}
+      <p class="text-sm text-on-surface-variant">ผู้ดูแลของคุณสามารถดูประวัติแบบละเอียดพร้อมกราฟสรุปได้ที่ Caregiver Portal</p>
+    </div>
+  `);
+}
+
+function viewContacts(){
+  const primary = STATE.contacts.find(c=>c.isPrimary) || STATE.contacts[0];
+  const family = STATE.contacts.filter(c=>!c.isPrimary);
+  const latestAdvice = STATE.advice[0];
+
+  return shell("#/contacts", "ติดต่อผู้ดูแล", "MedTime", true, `
+    <section class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2 bg-surface-container-low p-3 rounded-xl">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-3.5 h-3.5 rounded-full flex-shrink-0 ${primary&&primary.online?'bg-tertiary animate-pulse':'bg-outline-variant'}"></span>
+          <span class="text-sm font-semibold truncate">${primary&&primary.online?'ผู้ดูแลหลักออนไลน์พร้อมช่วยเหลือ':'ผู้ดูแลหลักออฟไลน์ขณะนี้'}</span>
+        </div>
+        ${voiceBtn("อ่านรายชื่อผู้ติดต่อ")}
+      </div>
+      <div class="px-1">
+        <h1 class="text-2xl font-bold">ติดต่อผู้ดูแลและฉุกเฉิน</h1>
+        <p class="text-on-surface-variant">ช่องทางติดต่อพยาบาลประจำตัว ลูกหลาน และสายด่วนกรณีฉุกเฉิน</p>
+      </div>
+    </section>
+
+    ${primary ? card(`
+      <div class="flex items-start gap-3 pl-2">
+        <div class="relative flex-shrink-0 w-20 h-20 rounded-full bg-primary-container/20 flex items-center justify-center">
+          ${icon('medical_information',36,false,'text-primary')}
+          <span class="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 shadow-sm">${icon('verified',16,true)}</span>
+        </div>
+        <div class="flex flex-col min-w-0 flex-1">
+          <span class="text-xl font-bold truncate">${esc(primary.name)}</span>
+          <p class="text-sm text-primary truncate">${esc(primary.role)}</p>
+          <div class="flex items-center gap-1 mt-1 text-tertiary text-sm">${icon('fiber_manual_record',18)}<span>${primary.online?'กำลังออนไลน์ • ว่างรับสาย':'ออฟไลน์'}</span></div>
+        </div>
+      </div>
+      <div class="flex flex-col gap-2 pl-2 mt-3">
+        ${primaryBtn({label:"โทรหาคุณพยาบาลทันที", icon:"call", href:`tel:${primary.phone.replace(/-/g,'')}`, extra:"!min-h-[64px]"})}
+        <button onclick='alert("เปิดห้องแชทกับ ${esc(primary.name)} (เชื่อมต่อ LINE Messaging API เมื่อขึ้นระบบจริง)")' class="w-full min-h-[56px] rounded-xl bg-surface-container text-on-surface font-bold flex items-center justify-center gap-2">${icon('chat',24)}ส่งข้อความคุย LINE</button>
+      </div>
+    `, "#00685f") : ""}
+
+    ${latestAdvice ? card(`
+      <div class="flex items-center justify-between mb-1 pl-2">
+        <span class="text-sm font-semibold text-primary">คำแนะนำล่าสุดจากผู้ดูแล</span>
+        <span class="text-xs text-on-surface-variant">วันนี้</span>
+      </div>
+      <p class="pl-2">"${esc(latestAdvice.message)}"</p>
+      ${latestAdvice.acknowledged
+        ? `<span class="mt-3 ml-2 inline-block text-sm text-tertiary">รับทราบแล้ว ✓</span>`
+        : `<button onclick="acknowledgeAdvice('${latestAdvice.id}')" class="mt-3 ml-2 min-h-[48px] px-4 bg-tertiary text-white rounded-lg font-semibold flex items-center gap-1 w-fit">${icon('thumb_up',20)}รับทราบคำแนะนำแล้ว</button>`}
+    `) : ""}
+
+    ${family.length>0 ? `<section class="flex flex-col gap-2">
+      <h2 class="text-xl font-bold px-1">เบอร์โทรครอบครัวและลูกหลาน</h2>
+      ${family.map(c=>card(`
+        <div class="flex items-center gap-3 pl-2">
+          <div class="w-14 h-14 rounded-full bg-secondary-container/20 flex items-center justify-center flex-shrink-0">${icon('person',28,false,'text-secondary')}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5"><span class="font-semibold truncate">${esc(c.name)}</span><span class="text-xs text-on-surface-variant">${esc(c.relation)}</span></div>
+            <span class="text-sm text-on-surface-variant">${esc(c.phone)}</span>
+          </div>
+          <a href="tel:${c.phone.replace(/-/g,'')}" class="w-14 h-14 rounded-full bg-tertiary text-white flex items-center justify-center flex-shrink-0">${icon('call',26)}</a>
+        </div>
+      `,null,"!shadow-sm")).join("")}
+    </section>` : ""}
+
+    ${card(`
+      <div class="pl-2 flex flex-col gap-3">
+        <div class="flex items-center gap-1.5 text-error text-xl font-bold">${icon('emergency',26,true)}ปุ่มขอความช่วยเหลือฉุกเฉิน (SOS)</div>
+        <p class="text-sm text-on-surface-variant">กดปุ่มด้านล่างทันทีเมื่อมีอาการผิดปกติหรือหมดสติ</p>
+        <a href="tel:1669" class="w-full min-h-[72px] bg-error text-white rounded-xl flex flex-col items-center justify-center shadow">
+          <div class="flex items-center gap-2">${icon('local_hospital',36)}<span class="text-xl font-bold">โทรเรียกรถพยาบาล 1669</span></div>
+          <span class="text-xs opacity-90">สถาบันการแพทย์ฉุกเฉินแห่งชาติ (โทรฟรี 24 ชม.)</span>
+        </a>
+        <button onclick="sendLocation()" class="w-full min-h-[56px] bg-surface-container-lowest text-on-surface rounded-xl flex items-center justify-center gap-2 font-bold shadow-sm">${icon('share_location',26,false,'text-error')}<span>ส่งพิกัดบ้านฉุกเฉินให้ลูกหลาน</span></button>
+      </div>
+    `, null, "!bg-error-container/40 border-2 border-error/30")}
+
+    ${card(`
+      <div class="flex items-center gap-2 pl-2">${icon('home_pin',24,false,'text-primary')}<span class="text-xl font-bold">ข้อมูลที่อยู่สำหรับแจ้งหน่วยกู้ชีพ</span></div>
+      <div class="bg-surface-container-low p-3 rounded-lg ml-2 mt-2">
+        <p class="font-bold">${esc(STATE.patient.address)}</p>
+        <p class="text-secondary text-sm mt-1">${esc(STATE.patient.addressNote)}</p>
+      </div>
+    `, null, "!shadow-sm mb-4")}
+  `);
+}
+
+function viewMissed(){
+  const missed = todaysLogs().filter(l=>l.status==="missed");
+  const primary = STATE.contacts.find(c=>c.isPrimary);
+  const body = missed.map(log=>{
+    const med = findMed(log.medicationId);
+    return card(`
+      <div class="flex items-start gap-3 pl-2">
+        <div class="w-16 h-16 rounded-full flex-shrink-0 border-2 border-error/40 flex items-center justify-center" style="background:${med.color}">${icon('medication',30,false, med.color==="#FFFFFF"?"text-on-surface":"text-white")}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-lg font-semibold">${esc(med.name)}</p>
+          <p class="text-sm text-on-surface-variant">${esc(med.dosage)}</p>
+          <p class="text-sm text-error mt-1 flex items-center gap-1">${icon('schedule',18)}กำหนดเวลา ${log.scheduledTime} น. (${SLOT_LABELS[log.slot].th})</p>
+        </div>
+      </div>
+      <div class="flex flex-col gap-2 mt-3 pl-2">
+        ${primaryBtn({label:"กินยานี้แล้วตอนนี้", icon:"check_circle", onclick:`markDose('${log.id}','taken')`, extra:"!min-h-[64px]"})}
+        ${primary?primaryBtn({label:"โทรปรึกษาพยาบาลก่อนกินยา", icon:"call", variant:"secondary", href:`tel:${primary.phone.replace(/-/g,'')}`}):""}
+      </div>
+    `, "#BA1A1A", "border-2 border-error/20");
+  }).join("");
+
+  return shell(null, "รายการยาที่พลาด", "MedTime", true, `
+    <div class="flex items-center justify-between px-1">
+      <h1 class="text-2xl font-bold">ยังไม่ได้บันทึกการรับประทานยา</h1>
+      ${voiceBtn("นี่คือรายการยาที่ยังไม่ได้บันทึกการรับประทาน กรุณากดกินยาแล้วเมื่อทานยาเรียบร้อย")}
+    </div>
+    ${missed.length===0?`<div class="flex flex-col items-center text-center gap-2 py-10 text-on-surface-variant">${icon('celebration',48)}<p class="font-semibold text-on-surface">วันนี้ยังไม่มีรายการที่พลาดค่ะ</p><p class="text-sm">คุณยายกินยาตรงเวลาได้ดีมาก เก่งมากค่ะ!</p></div>`:body}
+  `);
+}
+
+function viewSos(){
+  const alerts = STATE.alerts.slice(0,5);
+  const primary = STATE.contacts.find(c=>c.isPrimary);
+  const logs = todaysLogs();
+  const taken = logs.filter(l=>l.status==="taken").length;
+  let mainSection = "";
+
+  if(sosState.phase==="counting"){
+    const circumference = 2*Math.PI*70;
+    const progress = (sosState.seconds/5)*circumference;
+    mainSection = `
+      <div class="w-full bg-error text-white rounded-xl p-5 shadow-lg flex flex-col items-center text-center gap-2">
+        <div class="flex items-center justify-center gap-2">${icon('warning',32,true)}<span class="text-lg uppercase tracking-wider font-bold">แจ้งเตือนฉุกเฉิน SOS</span></div>
+        <p class="font-semibold max-w-sm">กำลังส่งสัญญาณขอความช่วยเหลือฉุกเฉินไปยังผู้ดูแลและครอบครัวทันที</p>
+      </div>
+      <div class="w-full flex flex-col items-center justify-center py-8">
+        <div class="relative w-48 h-48 flex items-center justify-center">
+          <div class="absolute inset-0 rounded-full bg-error-container/60 animate-ping"></div>
+          <svg class="w-full h-full transform -rotate-90 relative z-10" viewBox="0 0 160 160">
+            <circle cx="80" cy="80" fill="none" r="70" stroke="#e2e7ff" stroke-width="12"></circle>
+            <circle cx="80" cy="80" fill="none" r="70" stroke="#ba1a1a" stroke-dasharray="${circumference}" stroke-dashoffset="${circumference-progress}" stroke-linecap="round" stroke-width="12" style="transition:stroke-dashoffset 1s linear"></circle>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
+            <span class="text-5xl font-bold text-error leading-none">${sosState.seconds}</span>
+            <span class="text-sm text-on-surface-variant mt-1 font-semibold">วินาที</span>
+          </div>
+        </div>
+        <p class="text-error font-bold mt-3 text-center">กำลังเชื่อมต่อสัญญาณฉุกเฉินอัตโนมัติ...</p>
+      </div>
+      <button onclick="cancelSos()" class="w-full min-h-[64px] bg-surface-container-lowest text-error shadow-md rounded-xl p-4 flex items-center justify-center gap-3">
+        ${icon('cancel',32)}
+        <div class="flex flex-col text-left">
+          <span class="text-lg font-bold">ยกเลิกสัญญาณ SOS</span>
+          <span class="text-xs text-on-surface-variant font-medium">กดตรงนี้หากสัมผัสโดนโดยไม่ตั้งใจ</span>
+        </div>
+      </button>`;
+  } else if(sosState.phase==="cancelled"){
+    mainSection = card(`
+      <div class="flex flex-col items-center gap-2 py-4">
+        ${icon('check_circle',48,true,'text-tertiary')}
+        <p class="text-lg font-bold">ยกเลิกสัญญาณ SOS แล้ว</p>
+        <p class="text-sm text-on-surface-variant">ไม่มีการส่งแจ้งเตือนไปยังผู้ดูแล</p>
+        <button onclick="navigate('#/home')" class="mt-2 font-semibold text-primary underline">กลับหน้าหลัก</button>
+      </div>
+    `, null, "!bg-tertiary-container/10 border-2 border-tertiary/30 text-center");
+  } else {
+    mainSection = card(`
+      <div class="flex flex-col items-center gap-2 py-4">
+        ${icon('campaign',48,true,'text-error')}
+        <p class="text-lg font-bold">ส่งสัญญาณ SOS เรียบร้อยแล้ว</p>
+        <p class="text-sm text-on-surface-variant">${primary?esc(primary.name):''} และครอบครัวได้รับการแจ้งเตือนแล้ว</p>
+      </div>
+    `, null, "!bg-error-container/40 border-2 border-error/30 text-center");
+  }
+
+  const alertsHtml = alerts.length ? `<section class="flex flex-col gap-2 mb-4">
+    <h2 class="text-xl font-bold px-1">การแจ้งเตือนล่าสุด</h2>
+    ${alerts.map(a=>card(`
+      <div class="flex items-start gap-3 pl-2">
+        ${icon(a.resolved?'check_circle':'notifications_active',22,false,a.resolved?'text-tertiary':'text-secondary')}
+        <div class="flex-1 min-w-0"><p class="text-sm">${esc(a.message)}</p><p class="text-xs text-on-surface-variant">${new Date(a.createdAt).toLocaleString('th-TH')}</p></div>
+      </div>
+    `,null,"!shadow-sm")).join("")}
+  </section>` : "";
+
+  return shell(null, "Emergency Alert", "MedTime", false, `
+    ${mainSection}
+    ${card(`
+      <div class="flex items-center justify-between pl-2">
+        <div class="flex items-center gap-2 text-primary">${icon('medical_information',26)}<h2 class="text-xl font-bold text-on-surface">ข้อมูลผู้ป่วยที่ระบบส่งออก</h2></div>
+        <span class="px-3 py-1 bg-tertiary-container text-white rounded-full text-xs font-bold flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>ส่งสด</span>
+      </div>
+      <div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl mt-3 ml-2">
+        <div class="w-16 h-16 rounded-xl bg-primary-container/20 flex items-center justify-center flex-shrink-0">${icon('person',32,false,'text-primary')}</div>
+        <div class="min-w-0"><h3 class="font-bold truncate">${esc(STATE.patient.name)}</h3><p class="text-sm text-on-surface-variant font-semibold">อายุ ${STATE.patient.age} ปี</p></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3 ml-2">
+        <div class="bg-surface-container p-3 rounded-xl flex items-center gap-2">
+          <div class="w-12 h-12 rounded-xl bg-tertiary text-white flex items-center justify-center">${icon('task_alt',26,true)}</div>
+          <div class="flex flex-col"><span class="text-xs text-on-surface-variant">กินยาวันนี้</span><span class="text-xl font-bold">${taken}/${logs.length}</span></div>
+        </div>
+        <div class="bg-surface-container p-3 rounded-xl flex items-center gap-2">
+          <div class="w-12 h-12 rounded-xl bg-secondary text-white flex items-center justify-center">${icon('home_pin',24)}</div>
+          <div class="flex flex-col min-w-0"><span class="text-xs text-on-surface-variant">ที่อยู่</span><span class="text-xs truncate">${esc(STATE.patient.addressNote)}</span></div>
+        </div>
+      </div>
+    `)}
+    <a href="tel:1669" class="w-full min-h-[64px] bg-error text-white rounded-xl flex items-center justify-center gap-2 font-bold shadow">${icon('local_hospital',28)}โทรเรียกรถพยาบาล 1669</a>
+    ${alertsHtml}
+    ${patientBottomNav(null)}
+  `);
+}
+
+function viewSettings(){
+  const opts = [{k:"normal",l:"มาตรฐาน",s:18},{k:"large",l:"ใหญ่",s:22},{k:"xlarge",l:"ใหญ่พิเศษ",s:26}];
+  return shell("#/settings", "ตั้งค่า", "MedTime", true, `
+    <div class="flex items-center justify-between px-1">
+      <h1 class="text-2xl font-bold">${esc(STATE.patient.name)}</h1>
+      <button onclick='speak("แตะฟังคำอธิบายหน้านี้ ผู้ช่วยเสียงพร้อมช่วยเหลือคุณตาคุณยายเสมอค่ะ")' class="min-h-[48px] px-3 rounded-full bg-surface-container flex items-center gap-1.5 text-primary flex-shrink-0">${icon('volume_up',20)}<span class="text-sm font-semibold">อ่าน</span></button>
+    </div>
+
+    ${card(`<button onclick="navigate('#/profile')" class="w-full flex items-center justify-between gap-3 pl-2">
+      <div class="flex items-center gap-3">${icon('edit_note',26,false,'text-primary')}<span class="font-semibold">แก้ไขข้อมูลส่วนตัว / แจ้งอัปเดตแพทย์</span></div>
+      ${icon('chevron_right',22,false,'text-on-surface-variant')}
+    </button>`)}
+
+    ${card(`
+      <p class="font-semibold mb-3 pl-2">ขนาดตัวอักษร</p>
+      <div class="flex gap-2 pl-2">
+        ${opts.map(o=>`<button onclick="setFontScale('${o.k}')" class="flex-1 min-h-[64px] rounded-xl flex flex-col items-center justify-center gap-0.5 border-2 ${STATE.fontScale===o.k?'bg-primary text-white border-primary':'bg-surface-container-low border-transparent'}">
+          <span class="font-bold" style="font-size:${o.s}px">ก</span><span class="text-xs">${o.l}</span>
+        </button>`).join("")}
+      </div>
+    `)}
+
+    ${card(`
+      <p class="font-semibold mb-3 pl-2">ความเร็วเสียงอ่าน</p>
+      <div class="pl-2 flex flex-col gap-3">
+        <input type="range" min="0.6" max="1.3" step="0.1" value="${STATE.speechRate}" oninput="setSpeechRate(this.value)" class="w-full accent-primary h-3">
+        <div class="flex justify-between text-xs text-on-surface-variant px-1"><span>ช้าเน้นย้ำ</span><span>ปกติ ชัดเจน</span><span>เร็ว</span></div>
+        <button onclick='speak("นี่คือตัวอย่างเสียงอ่านของคุณตาคุณยาย ปรับความเร็วได้ตามสบายค่ะ")' class="min-h-[56px] rounded-xl bg-primary-container/15 text-primary font-bold flex items-center justify-center gap-2">${icon('play_arrow',24)}ลองฟังเสียง</button>
+      </div>
+    `)}
+
+    ${card(`<button onclick="navigate('#/caregiver/login')" class="w-full flex items-center justify-between gap-3 pl-2">
+      <div class="flex items-center gap-3">${icon('medical_services',26,false,'text-primary')}<span class="font-semibold">เข้าสู่ระบบ Caregiver Portal</span></div>
+      ${icon('chevron_right',22,false,'text-on-surface-variant')}
+    </button>`)}
+
+    ${card(`<div class="pl-2 flex flex-col gap-1"><p class="font-semibold">เกี่ยวกับ</p><p class="text-sm text-on-surface-variant">MedTime — ผู้ช่วยกินยาสำหรับผู้สูงอายุ</p><p class="text-xs text-on-surface-variant">เวอร์ชัน 1.0.0 (Single-file build)</p></div>`, null, "mb-4")}
+
+    <button onclick="logout()" class="w-full min-h-[56px] rounded-xl text-on-surface-variant font-bold flex items-center justify-center gap-2 mb-4">${icon('logout',24)}ออกจากระบบ</button>
+  `);
+}
+
+function viewProfile(){
+  const p = STATE.patient;
+  return shell(null, "ข้อมูลส่วนตัว", "MedTime", true, `
+    <h1 class="text-2xl font-bold px-1">แก้ไขข้อมูลส่วนตัว</h1>
+    <form onsubmit="saveProfile(event)" class="flex flex-col gap-4">
+      ${card(`
+        <div class="flex flex-col gap-4 pl-2">
+          <div class="flex flex-col gap-1.5"><label class="font-semibold" for="p-name">ชื่อ-นามสกุล</label><input id="p-name" value="${esc(p.name)}" class="w-full min-h-[60px] px-4 rounded-xl bg-surface-container-low text-lg focus:outline-none focus:ring-2 focus:ring-primary"></div>
+          <div class="flex flex-col gap-1.5"><label class="font-semibold" for="p-age">อายุ (ปี)</label><input id="p-age" type="number" value="${p.age}" class="w-full min-h-[60px] px-4 rounded-xl bg-surface-container-low text-lg focus:outline-none focus:ring-2 focus:ring-primary"></div>
+        </div>
+      `)}
+      ${card(`
+        <div class="flex flex-col gap-4 pl-2">
+          <div class="flex flex-col gap-1.5"><label class="font-semibold" for="p-address">ที่อยู่ (สำหรับแจ้งเหตุฉุกเฉิน)</label><textarea id="p-address" rows="3" class="w-full px-4 py-3 rounded-xl bg-surface-container-low resize-none focus:outline-none focus:ring-2 focus:ring-primary">${esc(p.address)}</textarea></div>
+          <div class="flex flex-col gap-1.5"><label class="font-semibold" for="p-note">จุดสังเกตบ้าน</label><input id="p-note" value="${esc(p.addressNote)}" class="w-full min-h-[60px] px-4 rounded-xl bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-primary"></div>
+        </div>
+      `, null, "mb-4")}
+      ${primaryBtn({label:"บันทึกข้อมูล", icon:"save", type:"submit", extra:"!min-h-[64px] mb-4"})}
+    </form>
+  `);
+}
+
+/* ----- Caregiver views ----- */
+function caregiverShell(title, subtitle, active, innerHtml){
+  const navItems = [
+    {h:"#/caregiver", l:"แดชบอร์ด", i:"space_dashboard"},
+    {h:"#/caregiver/report", l:"รายงาน", i:"monitoring"},
+  ];
+  return `
+  <div class="min-h-screen flex flex-col">
+    <header class="sticky top-0 z-40 bg-surface/90 backdrop-blur-xl shadow-sm no-print">
+      <div class="h-20 px-5 flex items-center justify-between gap-2 max-w-4xl mx-auto w-full">
+        <div class="flex flex-col min-w-0"><h1 class="text-xl font-bold truncate">${esc(title)}</h1>${subtitle?`<p class="text-sm text-on-surface-variant truncate">${esc(subtitle)}</p>`:""}</div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button onclick="navigate('#/onboarding')" class="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-surface-container rounded-full text-sm text-on-surface-variant">${icon('switch_account',18)}สลับไปแอปผู้ป่วย</button>
+          <button onclick="caregiverLogout()" class="flex items-center gap-1.5 px-3 py-2 bg-surface-container rounded-full text-sm text-on-surface-variant">${icon('logout',18)}ออกจากระบบ</button>
+        </div>
+      </div>
+    </header>
+    <main class="flex-1 px-5 py-4 max-w-4xl w-full mx-auto pb-24">${innerHtml}</main>
+    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-surface/95 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.06)] no-print">
+      <div class="flex justify-around items-center h-20">
+        ${navItems.map(it=>`<button onclick="navigate('${it.h}')" class="flex flex-col items-center justify-center gap-1 min-w-[72px] ${active===it.h?'text-primary font-bold':'text-on-surface-variant'}">${icon(it.i,26)}<span class="text-xs">${it.l}</span></button>`).join("")}
+      </div>
+    </nav>
+  </div>`;
+}
+
+function viewCaregiverLogin(){
+  return `
+  <div class="min-h-screen flex items-center justify-center p-5">
+    <div class="w-full max-w-md flex flex-col gap-4">
+      <div class="flex flex-col items-center text-center gap-2">
+        <div class="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow">${icon('health_and_safety',30,true,'text-white')}</div>
+        <h1 class="text-xl font-bold mt-2">ระบบบริหารจัดการและติดตามการจ่ายยาสำหรับผู้สูงอายุ</h1>
+        <p class="text-sm text-on-surface-variant">เข้าสู่ระบบสำหรับบุคลากรทางการแพทย์ / แอดมิน</p>
+      </div>
+      <form onsubmit="caregiverLoginSubmit(event)" class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-3">
+        <div class="flex flex-col gap-1.5"><label class="text-sm font-semibold">เบอร์โทรศัพท์ หรือรหัสพนักงาน</label><input placeholder="${esc(STATE.staff.phone)}" class="min-h-[52px] px-4 rounded-lg bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-primary"></div>
+        <div class="flex flex-col gap-1.5"><label class="text-sm font-semibold">รหัสผ่าน (PIN)</label><input id="cg-pin" type="password" inputmode="numeric" placeholder="••••" class="min-h-[52px] px-4 rounded-lg bg-surface-container-low tracking-widest focus:outline-none focus:ring-2 focus:ring-primary"></div>
+        <p id="cg-error" class="text-sm text-error"></p>
+        <button type="submit" class="min-h-[52px] rounded-lg bg-primary text-white font-bold flex items-center justify-center gap-2 mt-1">${icon('login',22)}เข้าสู่ระบบ</button>
+        <p class="text-xs text-on-surface-variant text-center">รหัสทดลองใช้: 1234</p>
+      </form>
+      <div class="flex justify-center gap-3">
+        <button onclick="navigate('#/onboarding')" class="text-sm text-primary underline">กลับไปแอปผู้ป่วย</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function viewCaregiverDashboard(){
+  if(!STATE.caregiverAuthed){ navigate('#/caregiver/login'); return ""; }
+  const logs = todaysLogs();
+  const taken = logs.filter(l=>l.status==="taken").length;
+  const unresolved = STATE.alerts.filter(a=>!a.resolved);
+  const primary = STATE.contacts.find(c=>c.isPrimary);
+
+  const weekly = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const ds = d.toISOString().slice(0,10);
+    const dayLogs = STATE.doseLogs.filter(l=>l.date===ds);
+    const pct = dayLogs.length ? Math.round(dayLogs.filter(l=>l.status==="taken").length/dayLogs.length*100) : (ds===todayStr()?0:90);
+    weekly.push({date:ds, pct});
+  }
+
+  const monitorRows = SLOT_ORDER.map(slot=>{
+    const slotLogs = logs.filter(l=>l.slot===slot);
+    if(slotLogs.length===0) return "";
+    const rows = slotLogs.map(log=>{
+      const med = findMed(log.medicationId);
+      const cls = log.status==="taken"?"text-tertiary bg-tertiary-container/10":log.status==="missed"?"text-error bg-error-container":"text-secondary bg-secondary-container/10";
+      const label = log.status==="taken"?"ทานแล้ว":log.status==="missed"?"พลาด":"รอ";
+      return `<div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0"><span class="w-3 h-3 rounded-full flex-shrink-0 border border-outline-variant" style="background:${med.color}"></span><span class="text-sm truncate">${esc(med.name)} • ${log.scheduledTime} น.</span></div>
+        <span class="px-2 py-1 rounded-full text-xs flex-shrink-0 ${cls}">${label}</span>
+      </div>`;
+    }).join("");
+    return `<div class="py-3 border-t border-outline-variant/40 first:border-t-0">
+      <div class="flex items-center gap-1.5 text-on-surface-variant mb-2">${icon(SLOT_LABELS[slot].icon,18)}<span class="text-sm font-semibold">${SLOT_LABELS[slot].th}</span></div>
+      <div class="flex flex-col gap-2">${rows}</div>
+    </div>`;
+  }).join("");
+
+  return caregiverShell("ศูนย์ควบคุมและดูแลการรับประทานยา", `ดูแล ${STATE.patient.name}`, "#/caregiver", `
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2 flex flex-col gap-4">
+        ${unresolved.length>0 ? `<div class="bg-error-container/40 border-2 border-error/30 rounded-xl p-4 flex flex-col gap-2">
+          <div class="flex items-center gap-2 text-error font-bold">${icon('notifications_active',24,true)}การแจ้งเตือนที่ต้องดำเนินการ (${unresolved.length})</div>
+          ${unresolved.map(a=>`<div class="flex items-center justify-between gap-2 bg-surface-container-lowest rounded-lg p-3">
+            <div class="min-w-0"><p class="text-sm">${esc(a.message)}</p><p class="text-xs text-on-surface-variant">${timeAgo(a.createdAt)}</p></div>
+            <button onclick="resolveAlert('${a.id}')" class="px-3 py-2 rounded-lg bg-tertiary text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0">${icon('check',16)}รับทราบ</button>
+          </div>`).join("")}
+        </div>` : ""}
+
+        <div class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-2">
+          <div class="flex items-center justify-between"><h2 class="text-lg font-bold">สถานะการรับประทานยาวันนี้ (Real-time Medication Monitor)</h2><span class="font-bold text-primary">${taken}/${logs.length}</span></div>
+          <div class="w-full h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-tertiary" style="width:${logs.length?taken/logs.length*100:0}%"></div></div>
+          <div>${monitorRows}</div>
+        </div>
+
+        <div class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-2">
+          <h3 class="text-lg font-bold">สถิติความสม่ำเสมอในการรับประทานยาประจำสัปดาห์</h3>
+          <div class="flex items-end gap-2 h-32">
+            ${weekly.map(d=>`<div class="flex-1 flex flex-col items-center gap-1">
+              <div class="w-full bg-surface-container rounded-t-lg flex-1 flex items-end overflow-hidden"><div class="w-full bg-primary rounded-t-lg" style="height:${d.pct}%"></div></div>
+              <span class="text-xs text-on-surface-variant">${new Date(d.date).toLocaleDateString('th-TH',{weekday:'short'})}</span>
+            </div>`).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-4">
+        <div class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-2">
+          <h3 class="text-lg font-bold">ผู้ป่วยที่ดูแลใกล้ชิด</h3>
+          <div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl">
+            <div class="w-14 h-14 rounded-full bg-primary-container/20 flex items-center justify-center flex-shrink-0">${icon('person',28,false,'text-primary')}</div>
+            <div class="min-w-0"><p class="font-semibold truncate">${esc(STATE.patient.name)}</p><p class="text-xs text-on-surface-variant">อายุ ${STATE.patient.age} ปี</p></div>
+          </div>
+          <a href="tel:${primary?primary.phone.replace(/-/g,''):''}" class="min-h-[48px] rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-1.5">${icon('call',18)}โทรหาผู้ป่วย</a>
+          <button onclick="navigate('#/caregiver/report')" class="min-h-[48px] rounded-lg bg-surface-container font-semibold flex items-center justify-center gap-1.5">${icon('description',18)}ดูรายงาน 31 วัน</button>
+        </div>
+
+        <div class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-2">
+          <h3 class="text-lg font-bold">บันทึกคำแนะนำ &amp; บรอดแคสต์</h3>
+          <textarea id="broadcast-text" placeholder="พิมพ์คำแนะนำถึงผู้ป่วย..." rows="3" class="w-full px-3 py-2 rounded-lg bg-surface-container-low text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+          <button onclick="sendBroadcast()" class="min-h-[48px] rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-1.5">${icon('send',18)}ส่งถึงผู้ป่วย</button>
+          <div class="flex flex-col gap-2 mt-1 max-h-52 overflow-y-auto">
+            ${STATE.advice.slice(0,5).map(a=>`<div class="p-3 bg-surface-container-low rounded-lg"><p class="text-sm">${esc(a.message)}</p><p class="text-xs text-on-surface-variant mt-1">${a.acknowledged?'ผู้ป่วยรับทราบแล้ว ✓':'รอผู้ป่วยรับทราบ'}</p></div>`).join("")}
+          </div>
+        </div>
+
+        <div class="bg-surface-container-lowest rounded-xl shadow p-5 flex flex-col gap-2">
+          <h3 class="text-lg font-bold">รีเซ็ตรหัส PIN ให้ผู้ป่วย</h3>
+          <div class="flex gap-2">
+            <input oninput="setPinResetDraft(this.value)" placeholder="รหัส PIN 4 หลักใหม่" inputmode="numeric" class="flex-1 min-h-[48px] px-3 rounded-lg bg-surface-container-low tracking-widest focus:outline-none focus:ring-2 focus:ring-primary">
+            <button onclick="resetPatientPin()" class="min-h-[48px] px-4 rounded-lg bg-tertiary text-white font-semibold flex items-center gap-1.5">${icon('check',18)}ตั้งรหัส</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function viewCaregiverReport(){
+  if(!STATE.caregiverAuthed){ navigate('#/caregiver/login'); return ""; }
+  const last31 = [];
+  for(let i=30;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i); const ds = d.toISOString().slice(0,10); last31.push({date:ds, logs:STATE.doseLogs.filter(l=>l.date===ds)}); }
+  const totalTaken = last31.reduce((s,d)=>s+d.logs.filter(l=>l.status==="taken").length,0);
+  const totalLogs = last31.reduce((s,d)=>s+d.logs.length,0);
+  const overallPct = totalLogs ? Math.round(totalTaken/totalLogs*100) : 0;
+
+  function dayColor(pct){ if(pct===null) return "bg-surface-container"; if(pct===100) return "bg-tertiary"; if(pct>=50) return "bg-secondary-container"; return "bg-error-container"; }
+  const grid = last31.map(d=>{
+    const taken = d.logs.filter(l=>l.status==="taken").length;
+    const pct = d.logs.length ? Math.round(taken/d.logs.length*100) : null;
+    return `<div title="${d.date}: ${taken}/${d.logs.length}" class="aspect-square rounded-md flex items-center justify-center text-xs ${dayColor(pct)}">${new Date(d.date).getDate()}</div>`;
+  }).join("");
+
+  const perMed = STATE.medications.map(med=>{
+    const logs = STATE.doseLogs.filter(l=>l.medicationId===med.id);
+    const taken = logs.filter(l=>l.status==="taken").length;
+    const missed = logs.filter(l=>l.status==="missed").length;
+    return `<tr class="border-b border-outline-variant/20 text-sm">
+      <td class="py-2 pr-2 flex items-center gap-2"><span class="w-3 h-3 rounded-full border border-outline-variant flex-shrink-0" style="background:${med.color}"></span>${esc(med.name)}</td>
+      <td class="py-2 pr-2 text-on-surface-variant">${esc(med.dosage)}</td>
+      <td class="py-2 pr-2 text-right text-tertiary">${taken}</td>
+      <td class="py-2 pr-2 text-right text-error">${missed}</td>
+      <td class="py-2 text-right font-bold">${logs.length?Math.round(taken/logs.length*100):0}%</td>
+    </tr>`;
+  }).join("");
+
+  return caregiverShell(STATE.patient.name, "บันทึกการรับประทานยา 31 วัน", "#/caregiver/report", `
+    <div class="flex justify-end mb-3 no-print">
+      <button onclick="window.print()" class="min-h-[48px] px-4 rounded-lg bg-primary text-white font-semibold flex items-center gap-1.5">${icon('picture_as_pdf',20)}ดาวน์โหลดเป็น PDF / พิมพ์</button>
+    </div>
+    <div class="flex flex-col gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-surface-container-lowest rounded-xl shadow p-3 flex flex-col items-center"><span class="text-2xl font-bold text-primary">${overallPct}%</span><span class="text-xs text-on-surface-variant text-center">ความสม่ำเสมอรวม 31 วัน</span></div>
+        <div class="bg-surface-container-lowest rounded-xl shadow p-3 flex flex-col items-center"><span class="text-2xl font-bold text-tertiary">${totalTaken}</span><span class="text-xs text-on-surface-variant text-center">ครั้งที่ทานตรงเวลา</span></div>
+        <div class="bg-surface-container-lowest rounded-xl shadow p-3 flex flex-col items-center"><span class="text-2xl font-bold text-error">${totalLogs-totalTaken}</span><span class="text-xs text-on-surface-variant text-center">ครั้งที่พลาด</span></div>
+        <div class="bg-surface-container-lowest rounded-xl shadow p-3 flex flex-col items-center"><span class="text-2xl font-bold">${STATE.medications.length}</span><span class="text-xs text-on-surface-variant text-center">รายการยาที่ติดตาม</span></div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl shadow p-5">
+        <h2 class="text-lg font-bold mb-3">บันทึกการรับประทานยา 31 วัน</h2>
+        <div class="grid grid-cols-7 gap-1.5">${grid}</div>
+        <div class="flex items-center gap-4 mt-3 text-xs text-on-surface-variant">
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-tertiary inline-block"></span>ครบทุกโดส</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-secondary-container inline-block"></span>พลาดบางส่วน</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-error-container inline-block"></span>พลาดส่วนใหญ่</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl shadow p-5 overflow-x-auto">
+        <h2 class="text-lg font-bold mb-3">ตารางรายการยาประจำตัวและสถิติการรับประทาน</h2>
+        <table class="w-full text-left">
+          <thead><tr class="text-xs text-on-surface-variant border-b border-outline-variant/40"><th class="py-2 pr-2">ชื่อยา</th><th class="py-2 pr-2">วิธีใช้</th><th class="py-2 pr-2 text-right">ทานแล้ว</th><th class="py-2 pr-2 text-right">พลาด</th><th class="py-2 text-right">% สม่ำเสมอ</th></tr></thead>
+          <tbody>${perMed}</tbody>
+        </table>
+      </div>
+    </div>
+  `);
+}
+
+/* ===================== ROUTER ===================== */
+function render(){
+  document.documentElement.style.fontSize = {normal:"100%",large:"115%",xlarge:"130%"}[STATE.fontScale] || "100%";
+  let hash = location.hash || "#/onboarding";
+  if(!STATE.onboarded && !hash.startsWith("#/caregiver") && hash!=="#/onboarding"){
+    location.hash = "#/onboarding"; return;
+  }
+  checkMissedDoses();
+  let html = "";
+  switch(true){
+    case hash==="#/onboarding": html = viewOnboarding(); break;
+    case hash==="#/home" || hash==="#/" || hash==="": html = viewHome(); break;
+    case hash==="#/add": html = viewAddMedicine(); break;
+    case hash==="#/history": html = viewHistory(); break;
+    case hash==="#/contacts": html = viewContacts(); break;
+    case hash==="#/missed": html = viewMissed(); break;
+    case hash==="#/sos":
+      html = viewSos();
+      if(sosState.phase==="counting" && sosState.seconds===5 && !sosState.timer){ sosState.timer = setTimeout(()=>{ sosState.seconds -= 1; sosTick(); }, 1000); }
+      break;
+    case hash==="#/settings": html = viewSettings(); break;
+    case hash==="#/profile": html = viewProfile(); break;
+    case hash==="#/caregiver/login": html = viewCaregiverLogin(); break;
+    case hash==="#/caregiver": html = viewCaregiverDashboard(); break;
+    case hash==="#/caregiver/report": html = viewCaregiverReport(); break;
+    default: html = viewHome();
+  }
+  if(html) document.getElementById("app").innerHTML = html;
+}
+
+window.addEventListener("hashchange", ()=>{ resetSos(); render(); });
+window.addEventListener("load", ()=>{
+  if(!location.hash) location.hash = STATE.onboarded ? "#/home" : "#/onboarding";
+  render();
+});
+</script>
+</body>
+</html>
